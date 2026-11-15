@@ -37,7 +37,7 @@ try {
     if (raw.host && cityByName(raw.host.city) && clockOK(raw.host.workStart) && clockOK(raw.host.workEnd) && raw.host.workStart !== raw.host.workEnd) stored.host = { city: raw.host.city, workStart: raw.host.workStart, workEnd: raw.host.workEnd };
   }
 } catch { /* Browsers with restricted storage still support a complete in-memory session. */ }
-const state = { ...stored, request: null, slots: [], selected: null, manual: false, busy: false, reason: '', response: '', warnings: [], error: false, includeWeekends: false, formWhen: 'nextWeek', formDate: '', bounds: {}, uid: `${uid()}@meridian` };
+const state = { ...stored, request: null, slots: [], selected: null, manual: false, busy: false, reason: '', response: '', warnings: [], error: false, includeWeekends: false, formDate: '', bounds: {}, uid: `${uid()}@meridian` };
 let globe, timeline, worker, job = 0, workerTimer, toastTimer, saveWarned = false;
 let draftPeople = [];
 let pickerTarget = null, pickerLimit = 80, pickerReturnFocus = null;
@@ -314,7 +314,6 @@ function selectPickerCity(cityKey, teamId) {
 function planDialog({ team = null, fresh = false } = {}) {
   const request = fresh ? null : state.request;
   draftPeople = team ? [{...team, name:nameFor(team)}] : (request?.participants || []).map(person => ({...person}));
-  const when = request ? state.formWhen : 'nextWeek';
   const date = request ? state.formDate : '';
   const zone = cityByName(state.host.city).zone;
   const today = globalThis.moment.tz(Date.now(), zone).format('YYYY-MM-DD');
@@ -322,8 +321,7 @@ function planDialog({ team = null, fresh = false } = {}) {
   openModal(tr('Plan a meeting'), '', `<form id="meeting-form" data-new="${!request}" novalidate>
     <label>${tr('My location')}${citySelect('host',state.host.city,'meeting-host')}</label>
     <label id="meet-with-label">${escape(ft('with'))}</label><div class="quick-places" role="group" aria-labelledby="meet-with-label">${['London','Shanghai','New York'].map(city=>button('quick-place',escape(cityName(city)), 'button quick-city', `data-city="${city}" aria-pressed="false"`)).join('')}${button('pick-place', `${icon('plus',14)} ${escape(pt('moreCities'))}`, 'button quiet', 'id="meeting-place"')}</div><div class="place-chips" id="meeting-people" aria-live="polite"></div>
-    <div class="form-row meeting-when"><label>${escape(ft('when'))}<select name="when" id="meeting-when"><option value="nextWeek" ${when === 'nextWeek' ? 'selected' : ''}>${escape(ft('nextWeek'))}</option><option value="tomorrow" ${when === 'tomorrow' ? 'selected' : ''}>${escape(ft('tomorrow'))}</option><option value="date" ${when === 'date' ? 'selected' : ''}>${escape(ft('chooseDate'))}</option></select></label><label>${tr('Duration (minutes)')}<select name="duration">${durations.map(n=>`<option value="${n}" ${n === (request?.duration || 45) ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
-    <label id="meeting-date-wrap" ${when === 'date' ? '' : 'hidden'}>${escape(ft('chooseDate'))}<input name="date" type="date" value="${escape(date)}" min="${today}"></label>
+    <div class="form-row meeting-when"><label id="meeting-date-wrap">${escape(ft('chooseDate'))}<input name="date" type="date" value="${escape(date)}" min="${today}"></label><label>${tr('Duration (minutes)')}<select name="duration">${durations.map(n=>`<option value="${n}" ${n === (request?.duration || 45) ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
     <details class="meeting-more"><summary>${escape(ft('more'))}</summary><div class="more-body"><p class="small muted">${escape(ft('workdays'))}</p><label class="check-line"><input type="checkbox" name="extended" ${request?.allowExtended ? 'checked' : ''}><span>${tr('Include early / late hours (07:00–22:00)')}</span></label><label class="check-line"><input type="checkbox" name="weekends" ${request && state.includeWeekends ? 'checked' : ''}><span>${tr('Include weekends')}</span></label><div class="person-hours"><strong>${tr('You')}</strong><div class="form-row"><label>${tr('Work starts')}<input type="time" name="hostStart" value="${state.host.workStart}"></label><label>${tr('Work ends')}<input type="time" name="hostEnd" value="${state.host.workEnd}"></label></div></div><div id="meeting-person-hours"></div></div></details>
     <p class="form-error" role="alert"></p><div class="form-actions"><button type="submit" class="button primary full">${tr('Find times')} ${icon('arrow', 15)}</button></div></form>`);
   paintDraftPeople();
@@ -350,7 +348,7 @@ function helpDialog() {
 }
 function home() {
   ++job; worker?.terminate(); clearTimeout(workerTimer); state.request = null; state.slots = []; state.selected = null; state.manual = false; state.busy = false;
-  state.response = ''; state.warnings = []; state.bounds = {}; state.includeWeekends = false; state.formWhen = 'nextWeek'; state.formDate = '';
+  state.response = ''; state.warnings = []; state.bounds = {}; state.includeWeekends = false; state.formDate = '';
   renderStatic(); renderResults(); updateVisuals(); window.scrollTo({ top: 0, behavior: 'auto' });
 }
 
@@ -369,12 +367,12 @@ document.addEventListener('submit', async event => {
     const host = cityByName(String(data.get('host') || ''));
     if (!host) { formError(form, ft('invalidCity')); $('#meeting-host').focus(); return; }
     if (!checkHours(form, data.get('hostStart'), data.get('hostEnd'))) { form.querySelector('details').open = true; return; }
-    const result = createFormRequest({ hostCity:host.city, participants:draftPeople, when:data.get('when'), date:data.get('date'), duration:Number(data.get('duration')), includeWeekends:data.has('weekends'), allowExtended:data.has('extended') });
+    const result = createFormRequest({ hostCity:host.city, participants:draftPeople, when:'date', date:data.get('date'), duration:Number(data.get('duration')), includeWeekends:data.has('weekends'), allowExtended:data.has('extended') });
     if (!result.ok) { formError(form, formMessage(result.error)); if (result.error === 'includesWeekend' || /work start|hours/.test(result.error)) form.querySelector('details').open = true; return; }
     result.request.title = form.dataset.new === 'true' ? '' : (state.request?.title || '');
     if (form.dataset.new === 'true') state.uid = `${uid()}@meridian`;
     state.host = {city:host.city, workStart:data.get('hostStart'), workEnd:data.get('hostEnd')};
-    state.request = result.request; state.includeWeekends = data.has('weekends'); state.formWhen = data.get('when'); state.formDate = data.get('date');
+    state.request = result.request; state.includeWeekends = data.has('weekends'); state.formDate = data.get('date');
     state.bounds = {}; state.warnings = []; state.response = ''; state.error = false;
     persist(); modal.close(); renderStatic(); searchTimes(); return;
   }
@@ -430,7 +428,6 @@ document.addEventListener('input', event => {
   }
 });
 document.addEventListener('change', event => {
-  if (event.target.id === 'meeting-when') $('#meeting-date-wrap').hidden = event.target.value !== 'date';
   if (event.target.id === 'picker-country') { pickerLimit = 80; paintPickerCities(); }
 });
 document.addEventListener('click', event => {
