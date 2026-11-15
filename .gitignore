@@ -1,0 +1,11 @@
+.DS_Store
+node_modules/
+*.log
+.env
+.env.*
+!.env.example
+.openai/
+.sites/
+work/
+playwright-report/
+test-results/
