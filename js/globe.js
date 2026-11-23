@@ -49,7 +49,12 @@ function element(tag, attrs, style, parent) {
 export async function createGlobe(container, { onSelect } = {}) {
   let renderer;
   try {
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
+    // Use the canvas fallback directly when WebGL is unavailable.
+    const surface = document.createElement('canvas');
+    const options = { antialias: true, alpha: true, powerPreference: 'low-power' };
+    const context = surface.getContext('webgl2', options);
+    if (!context) return createCanvasGlobe(container, { onSelect });
+    renderer = new THREE.WebGLRenderer({ ...options, canvas: surface, context });
   } catch {
     return createCanvasGlobe(container, { onSelect });
   }

@@ -1,5 +1,5 @@
 import { cities, allCities, cityByName } from './cities.js';
-import { createGlobe } from './globe.js';
+import { createGlobe } from './globe.js?v=2';
 import { localParts, localToInstants, buildICS } from './engine.js';
 import { evaluateMeeting } from './planner.js';
 import { createTimeline } from './timeline.js';
