@@ -247,6 +247,9 @@ function captureDraftHours() {
 function paintDraftPeople() {
   $('#meeting-people').innerHTML = draftPeople.map(person => `<span class="place-chip"><span>${escape(draftName(person))}</span>${button('remove-place', icon('close', 12), 'chip-remove', `data-id="${escape(person.id)}" aria-label="${escape(tr('Remove'))} ${escape(draftName(person))}"`)}</span>`).join('');
   $('#meeting-person-hours').innerHTML = draftPeople.map(person => `<div class="person-hours" data-hours-person="${escape(person.id)}"><strong>${escape(draftName(person))}</strong><div class="form-row"><label>${tr('Work starts')}<input type="time" data-hour="start" value="${person.workStart}"></label><label>${tr('Work ends')}<input type="time" data-hour="end" value="${person.workEnd}"></label></div></div>`).join('');
+  document.querySelectorAll('[data-action="toggle-saved-person"]').forEach(node => {
+    node.setAttribute('aria-pressed', String(draftPeople.some(person => person.id === node.dataset.id)));
+  });
   document.querySelectorAll('[data-action="quick-place"]').forEach(node => {
     const selected = draftPeople.some(person => person.city === node.dataset.city && !state.teams.some(team => team.id === person.id));
     node.setAttribute('aria-pressed', String(selected));
@@ -311,6 +314,10 @@ function selectPickerCity(cityKey, teamId) {
   if (pickerTarget === 'host') $('#meeting-form').elements.date.min = globalThis.moment.tz(Date.now(), city.zone).format('YYYY-MM-DD');
   closeCityPicker();
 }
+function savedContactsMarkup() {
+  if (!state.teams.length) return '';
+  return `<div class="saved-contacts" role="group" aria-label="${escape(t('已保存的团队与联系人', 'Saved teams & contacts'))}"><p class="small muted">${escape(t('从已保存的联系人中选择参会者（不会自动添加）。', 'Choose saved contacts to join. None are added automatically.'))}</p><div class="quick-places">${state.teams.map(team => button('toggle-saved-person', escape(nameFor(team)) + ' · ' + escape(cityName(team.city)), 'button quick-city', `data-id="${escape(team.id)}" aria-pressed="${draftPeople.some(person => person.id === team.id)}"`)).join('')}</div></div>`;
+}
 function planDialog({ team = null, fresh = false } = {}) {
   const request = fresh ? null : state.request;
   draftPeople = team ? [{...team, name:nameFor(team)}] : (request?.participants || []).map(person => ({...person}));
@@ -320,7 +327,7 @@ function planDialog({ team = null, fresh = false } = {}) {
   const durations = [...new Set([15,30,45,60,90,120,request?.duration || 45])].sort((a,b)=>a-b);
   openModal(tr('Plan a meeting'), '', `<form id="meeting-form" data-new="${!request}" novalidate>
     <label>${tr('My location')}${citySelect('host',state.host.city,'meeting-host')}</label>
-    <label id="meet-with-label">${escape(ft('with'))}</label><div class="quick-places" role="group" aria-labelledby="meet-with-label">${['London','Shanghai','New York'].map(city=>button('quick-place',escape(cityName(city)), 'button quick-city', `data-city="${city}" aria-pressed="false"`)).join('')}${button('pick-place', `${icon('plus',14)} ${escape(pt('moreCities'))}`, 'button quiet', 'id="meeting-place"')}</div><div class="place-chips" id="meeting-people" aria-live="polite"></div>
+    <label id="meet-with-label">${escape(ft('with'))}</label><div class="quick-places" role="group" aria-labelledby="meet-with-label">${['London','Shanghai','New York'].map(city=>button('quick-place',escape(cityName(city)), 'button quick-city', `data-city="${city}" aria-pressed="false"`)).join('')}${button('pick-place', `${icon('plus',14)} ${escape(pt('moreCities'))}`, 'button quiet', 'id="meeting-place"')}</div>${savedContactsMarkup()}<div class="place-chips" id="meeting-people" aria-live="polite"></div>
     <div class="form-row meeting-when"><label id="meeting-date-wrap">${escape(ft('chooseDate'))}<input name="date" type="date" value="${escape(date)}" min="${today}"></label><label>${tr('Duration (minutes)')}<select name="duration">${durations.map(n=>`<option value="${n}" ${n === (request?.duration || 45) ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
     <details class="meeting-more"><summary>${escape(ft('more'))}</summary><div class="more-body"><p class="small muted">${escape(ft('workdays'))}</p><label class="check-line"><input type="checkbox" name="extended" ${request?.allowExtended ? 'checked' : ''}><span>${tr('Include early / late hours (07:00–22:00)')}</span></label><label class="check-line"><input type="checkbox" name="weekends" ${request && state.includeWeekends ? 'checked' : ''}><span>${tr('Include weekends')}</span></label><div class="person-hours"><strong>${tr('You')}</strong><div class="form-row"><label>${tr('Work starts')}<input type="time" name="hostStart" value="${state.host.workStart}"></label><label>${tr('Work ends')}<input type="time" name="hostEnd" value="${state.host.workEnd}"></label></div></div><div id="meeting-person-hours"></div></div></details>
     <p class="form-error" role="alert"></p><div class="form-actions"><button type="submit" class="button primary full">${tr('Find times')} ${icon('arrow', 15)}</button></div></form>`);
@@ -444,6 +451,16 @@ document.addEventListener('click', event => {
   if (action === 'picker-back') closeCityPicker();
   if (action === 'picker-more') { pickerLimit += 80; paintPickerCities(); }
   if (action === 'choose-place') selectPickerCity(node.dataset.city,node.dataset.team);
+  if (action === 'toggle-saved-person') {
+    const team = state.teams.find(item => item.id === node.dataset.id);
+    if (!team) return;
+    if (draftPeople.some(person => person.id === team.id)) {
+      captureDraftHours();
+      draftPeople = draftPeople.filter(person => person.id !== team.id);
+      paintDraftPeople();
+      formError($('#meeting-form'), '');
+    } else addDraftPlace(team.city, team.id);
+  }
   if (action === 'quick-place') {
     const existing = draftPeople.find(person => person.city === node.dataset.city && !state.teams.some(team => team.id === person.id));
     if (existing) { captureDraftHours(); draftPeople = draftPeople.filter(person => person.id !== existing.id); paintDraftPeople(); formError($('#meeting-form'),''); }
